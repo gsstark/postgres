@@ -21,6 +21,9 @@ BufferUsage pgBufferUsage;
 
 static void BufferUsageAccumDiff(BufferUsage *dst,
 					 const BufferUsage *add, const BufferUsage *sub);
+static void ResourceUsageAccumDiff(struct rusage *dst,
+					   const struct rusage *add,
+					   const struct rusage *sub);
 
 /* Allocate new instrumentation structure(s) */
 Instrumentation *
@@ -40,6 +43,14 @@ InstrAlloc(int n, int instrument_options)
 			instr[i].needs_bufusage = true;
 	}
 
+	if (instrument_options & INSTRUMENT_RUSAGE)
+	{
+		int			i;
+
+		for (i = 0; i < n; i++)
+			instr[i].needs_rusage = true;
+	}
+
 	return instr;
 }
 
@@ -55,6 +66,8 @@ InstrStartNode(Instrumentation *instr)
 	/* initialize buffer usage per plan node */
 	if (instr->needs_bufusage)
 		instr->bufusage_start = pgBufferUsage;
+	if (instr->needs_rusage)
+		getrusage(RUSAGE_SELF, &instr->rusage_start);
 }
 
 /* Exit from a plan node */
@@ -81,6 +94,24 @@ InstrStopNode(Instrumentation *instr, double nTuples)
 	if (instr->needs_bufusage)
 		BufferUsageAccumDiff(&instr->bufusage,
 							 &pgBufferUsage, &instr->bufusage_start);
+
+	if (instr->needs_rusage)
+	{
+		struct rusage rusage;
+
+		if (INSTR_TIME_IS_ZERO(instr->rusage_start.ru_utime) ||
+			INSTR_TIME_IS_ZERO(instr->rusage_start.ru_stime))
+		{
+			elog(DEBUG2, "InstrStopNode called without rusage start");
+		}
+
+		getrusage(RUSAGE_SELF, &rusage);
+		ResourceUsageAccumDiff(&instr->rusage,
+							   &rusage,
+							   &instr->rusage_start);
+		INSTR_TIME_SET_ZERO(instr->rusage_start.ru_utime);
+		INSTR_TIME_SET_ZERO(instr->rusage_start.ru_stime);
+	}
 
 	/* Is this the first tuple of this cycle? */
 	if (!instr->running)
@@ -133,4 +164,23 @@ BufferUsageAccumDiff(BufferUsage *dst,
 	dst->local_blks_written += add->local_blks_written - sub->local_blks_written;
 	dst->temp_blks_read += add->temp_blks_read - sub->temp_blks_read;
 	dst->temp_blks_written += add->temp_blks_written - sub->temp_blks_written;
+}
+
+static void
+ResourceUsageAccumDiff(struct rusage *dst,
+					   const struct rusage *add,
+					   const struct rusage *sub)
+{
+	INSTR_TIME_ACCUM_DIFF(dst->ru_utime, add->ru_utime, sub->ru_utime);
+	INSTR_TIME_ACCUM_DIFF(dst->ru_stime, add->ru_stime, sub->ru_stime);
+	dst->ru_minflt   += add->ru_minflt   - sub->ru_minflt;
+	dst->ru_majflt   += add->ru_majflt   - sub->ru_majflt;
+	dst->ru_nswap    += add->ru_nswap    - sub->ru_nswap;
+	dst->ru_inblock  += add->ru_inblock  - sub->ru_inblock;
+	dst->ru_oublock  += add->ru_oublock  - sub->ru_oublock;
+	dst->ru_msgsnd   += add->ru_msgsnd   - sub->ru_msgsnd;
+	dst->ru_msgrcv   += add->ru_msgrcv   - sub->ru_msgrcv;
+	dst->ru_nsignals += add->ru_nsignals - sub->ru_nsignals;
+	dst->ru_nvcsw    += add->ru_nvcsw    - sub->ru_nvcsw;
+	dst->ru_nivcsw   += add->ru_nivcsw   - sub->ru_nivcsw;
 }

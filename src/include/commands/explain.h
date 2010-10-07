@@ -31,6 +31,7 @@ typedef struct ExplainState
 	bool		analyze;		/* print actual times */
 	bool		costs;			/* print costs */
 	bool		buffers;		/* print buffer usage */
+	bool		rusage;			/* print resource usage (from getrusage) */
 	ExplainFormat format;		/* output format */
 	/* other states */
 	PlannedStmt *pstmt;			/* top of plan */

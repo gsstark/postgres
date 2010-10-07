@@ -110,6 +110,7 @@ static void ExplainJSONLineEnding(ExplainState *es);
 static void ExplainYAMLLineStarting(ExplainState *es);
 static void escape_json(StringInfo buf, const char *str);
 static void escape_yaml(StringInfo buf, const char *str);
+static double normalize_memory(double amount, char **unit, int *precision);
 
 
 
@@ -142,6 +143,8 @@ ExplainQuery(ExplainStmt *stmt, const char *queryString,
 			es.costs = defGetBoolean(opt);
 		else if (strcmp(opt->defname, "buffers") == 0)
 			es.buffers = defGetBoolean(opt);
+		else if (strcmp(opt->defname, "resource") == 0)
+			es.rusage = defGetBoolean(opt);
 		else if (strcmp(opt->defname, "format") == 0)
 		{
 			char	   *p = defGetString(opt);
@@ -368,6 +371,8 @@ ExplainOnePlan(PlannedStmt *plannedstmt, ExplainState *es,
 		instrument_option |= INSTRUMENT_TIMER;
 	if (es->buffers)
 		instrument_option |= INSTRUMENT_BUFFERS;
+	if (es->rusage)
+		instrument_option |= INSTRUMENT_RUSAGE;
 
 	/*
 	 * Use a snapshot with an updated command ID to ensure this query sees
@@ -1097,6 +1102,97 @@ ExplainNode(PlanState *planstate, List *ancestors,
 		default:
 			break;
 	}
+
+	/* Show resource usage from getrusage */
+	if (es->rusage && es->format == EXPLAIN_FORMAT_TEXT)
+	{
+		const struct rusage *usage = &planstate->instrument->rusage;
+
+		bool has_rusage = (!INSTR_TIME_IS_ZERO(usage->ru_stime) || 
+						   !INSTR_TIME_IS_ZERO(usage->ru_utime) || 
+						   usage->ru_inblock > 0 || 
+						   usage->ru_oublock > 0);
+		bool has_verbose_rusage = (usage->ru_minflt   > 0 || 
+								   usage->ru_majflt   > 0 ||
+								   usage->ru_nswap    > 0 || 
+								   usage->ru_msgsnd   > 0 || 
+								   usage->ru_msgrcv   > 0 || 
+								   usage->ru_nsignals > 0 || 
+								   usage->ru_nvcsw    > 0 || 
+								   usage->ru_nivcsw   > 0);
+
+		if (has_rusage || (es->verbose && has_verbose_rusage))
+		{
+			appendStringInfoSpaces(es->str, es->indent *2);
+			appendStringInfoString(es->str, "Resources:");
+			
+			if (!INSTR_TIME_IS_ZERO(usage->ru_stime)) 
+			{
+				double stime = INSTR_TIME_GET_DOUBLE(usage->ru_stime);
+				appendStringInfo(es->str, " sys=%.3fms", stime * 1000);
+			}
+			
+			if (!INSTR_TIME_IS_ZERO(usage->ru_utime)) 
+			{
+				double utime = INSTR_TIME_GET_DOUBLE(usage->ru_utime);
+				appendStringInfo(es->str, " user=%.3fms", utime * 1000);
+			}
+			
+			if (usage->ru_inblock > 0)
+			{
+				double inblock;
+				char *units;
+				int prec;
+				inblock = normalize_memory((double)usage->ru_inblock * 512, &units, &prec);
+				appendStringInfo(es->str, " read=%.*f%s", prec, inblock, units);
+			}
+			if (usage->ru_oublock > 0)
+			{
+				double oublock;
+				char *units;
+				int prec;
+				oublock = normalize_memory((double)usage->ru_oublock * 512, &units, &prec);
+				appendStringInfo(es->str, " written=%.*f%s", prec, oublock, units);
+			}
+			if (es->verbose)
+			{
+				if (usage->ru_minflt > 0)
+					appendStringInfo(es->str, " minflt=%ld", usage->ru_minflt);
+				if (usage->ru_majflt > 0)
+					appendStringInfo(es->str, " majflt=%ld", usage->ru_majflt);
+				if (usage->ru_nswap > 0)
+					appendStringInfo(es->str, " nswap=%ld", usage->ru_nswap);
+				if (usage->ru_msgsnd > 0)
+					appendStringInfo(es->str, " msgsnd=%ld", usage->ru_msgsnd);
+				if (usage->ru_msgrcv > 0)
+					appendStringInfo(es->str, " msgrcv=%ld", usage->ru_msgrcv);
+				if (usage->ru_nsignals > 0)
+					appendStringInfo(es->str, " nsignals=%ld", usage->ru_nsignals);
+				if (usage->ru_nvcsw > 0)
+					appendStringInfo(es->str, " nvcsw=%ld", usage->ru_nvcsw);
+				if (usage->ru_nivcsw > 0)
+					appendStringInfo(es->str, " nivcsw=%ld", usage->ru_nivcsw);
+			}
+			appendStringInfoChar(es->str, '\n');
+		}
+	} 
+	else if (es->rusage) 
+	{
+		const struct rusage *usage = &planstate->instrument->rusage;
+
+		ExplainPropertyFloat("User Time", INSTR_TIME_GET_DOUBLE(usage->ru_utime), 3, es);
+		ExplainPropertyFloat("System Time", INSTR_TIME_GET_DOUBLE(usage->ru_stime), 3, es);
+		ExplainPropertyLong("Minor Page Faults", usage->ru_minflt, es);
+		ExplainPropertyLong("Major Page Faults", usage->ru_majflt, es);
+		ExplainPropertyLong("Swaps", usage->ru_nswap, es);
+		ExplainPropertyLong("Blocks Written", usage->ru_inblock, es);
+		ExplainPropertyLong("Blocks Read", usage->ru_oublock, es);
+		ExplainPropertyLong("Messages Sent", usage->ru_msgsnd, es);
+		ExplainPropertyLong("Messages Received", usage->ru_msgrcv, es);
+		ExplainPropertyLong("Signals Received", usage->ru_nsignals, es);
+		ExplainPropertyLong("Voluntary Context Switches", usage->ru_nvcsw, es);
+		ExplainPropertyLong("Involuntary Context Switches", usage->ru_nivcsw, es);
+	}	
 
 	/* Show buffer usage */
 	if (es->buffers)
@@ -2215,4 +2311,37 @@ static void
 escape_yaml(StringInfo buf, const char *str)
 {
 	escape_json(buf, str);
+}
+
+/*
+ * For a quantity of bytes pick a reasonable display unit for it and
+ * return the quantity in that unit. Also return the unit name and a
+ * reasonable precision via the reference parameters.
+ */
+
+static double normalize_memory(double amount, char **unit, int *precision)
+{
+	static char *units[] = {"bytes", "kB", "MB", "GB", "TB", "PB"};
+	char **u = units, **last = units + (sizeof(units)/sizeof(*units)-1);
+
+	while (amount > 1024.0 && u < last)
+	{
+		amount /= 1024.0;
+		u += 1;
+	}
+
+	*unit = *u;
+
+	/* if it's bytes or kB then don't print decimals since that's less
+	 * than blocksize, otherwise always print 3 significant digits */
+	if (u == units || u == units+1 )
+		*precision = 0;
+	else if (amount < 10)
+		*precision = 2;
+	else if (amount < 100)
+		*precision = 1;
+	else
+		*precision = 0;
+
+	return amount;
 }

@@ -15,6 +15,8 @@
 
 #include "portability/instr_time.h"
 
+#include <sys/time.h>
+#include <sys/resource.h>
 
 typedef struct BufferUsage
 {
@@ -32,6 +34,7 @@ typedef enum InstrumentOption
 {
 	INSTRUMENT_TIMER = 1 << 0,	/* needs timer */
 	INSTRUMENT_BUFFERS = 1 << 1,	/* needs buffer usage */
+	INSTRUMENT_RUSAGE = 1 << 2,	/* needs resource usage (getrusage) */
 	INSTRUMENT_ALL = 0x7FFFFFFF
 } InstrumentOption;
 
@@ -40,17 +43,20 @@ typedef struct Instrumentation
 	/* Info about current plan cycle: */
 	bool		running;		/* TRUE if we've completed first tuple */
 	bool		needs_bufusage; /* TRUE if we need buffer usage */
+	bool		needs_rusage;   /* TRUE if we need resource usage */
 	instr_time	starttime;		/* Start time of current iteration of node */
 	instr_time	counter;		/* Accumulated runtime for this node */
 	double		firsttuple;		/* Time for first tuple of this cycle */
 	double		tuplecount;		/* Tuples emitted so far this cycle */
 	BufferUsage bufusage_start; /* Buffer usage at start */
+	struct rusage rusage_start; /* Resource usage at start (from getrusage) */
 	/* Accumulated statistics across all completed cycles: */
 	double		startup;		/* Total startup time (in seconds) */
 	double		total;			/* Total total time (in seconds) */
 	double		ntuples;		/* Total tuples produced */
 	double		nloops;			/* # of run cycles for this node */
 	BufferUsage bufusage;		/* Total buffer usage */
+	struct rusage rusage;		/* Total resource usage (from getrusage) */ 
 } Instrumentation;
 
 extern PGDLLIMPORT BufferUsage pgBufferUsage;

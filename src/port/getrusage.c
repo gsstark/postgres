@@ -40,6 +40,7 @@ getrusage(int who, struct rusage * rusage)
 	FILETIME	kerneltime;
 	FILETIME	usertime;
 	ULARGE_INTEGER li;
+	IOCOUNTERS iocounters;
 
 	if (who != RUSAGE_SELF)
 	{
@@ -61,6 +62,12 @@ getrusage(int who, struct rusage * rusage)
 		return -1;
 	}
 
+	if (GetProcessIoCounters(GetCurrentProcess(), &iocounters) == 0)
+	{
+		_dosmaperr(GetLastError());
+		return -1;
+	}
+
 	/* Convert FILETIMEs (0.1 us) to struct timeval */
 	memcpy(&li, &kerneltime, sizeof(FILETIME));
 	li.QuadPart /= 10L;			/* Convert to microseconds */
@@ -71,6 +78,10 @@ getrusage(int who, struct rusage * rusage)
 	li.QuadPart /= 10L;			/* Convert to microseconds */
 	rusage->ru_utime.tv_sec = li.QuadPart / 1000000L;
 	rusage->ru_utime.tv_usec = li.QuadPart % 1000000L;
+
+	rusage->ru_inblock = iocounters.ReadTransferCount/512;
+	rusage->ru_oublock = iocounters.WriteTransferCount/512;
+
 #else							/* all but WIN32 */
 
 	struct tms	tms;
