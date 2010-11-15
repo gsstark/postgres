@@ -99,8 +99,8 @@ InstrStopNode(Instrumentation *instr, double nTuples)
 	{
 		struct rusage rusage;
 
-		if (INSTR_TIME_IS_ZERO(instr->rusage_start.ru_utime) ||
-			INSTR_TIME_IS_ZERO(instr->rusage_start.ru_stime))
+		if (INSTR_TIME_IS_ZERO_TV(instr->rusage_start.ru_utime) ||
+			INSTR_TIME_IS_ZERO_TV(instr->rusage_start.ru_stime))
 		{
 			elog(DEBUG2, "InstrStopNode called without rusage start");
 		}
@@ -109,8 +109,8 @@ InstrStopNode(Instrumentation *instr, double nTuples)
 		ResourceUsageAccumDiff(&instr->rusage,
 							   &rusage,
 							   &instr->rusage_start);
-		INSTR_TIME_SET_ZERO(instr->rusage_start.ru_utime);
-		INSTR_TIME_SET_ZERO(instr->rusage_start.ru_stime);
+		INSTR_TIME_SET_ZERO_TV(instr->rusage_start.ru_utime);
+		INSTR_TIME_SET_ZERO_TV(instr->rusage_start.ru_stime);
 	}
 
 	/* Is this the first tuple of this cycle? */
@@ -171,8 +171,8 @@ ResourceUsageAccumDiff(struct rusage *dst,
 					   const struct rusage *add,
 					   const struct rusage *sub)
 {
-	INSTR_TIME_ACCUM_DIFF(dst->ru_utime, add->ru_utime, sub->ru_utime);
-	INSTR_TIME_ACCUM_DIFF(dst->ru_stime, add->ru_stime, sub->ru_stime);
+	INSTR_TIME_ACCUM_DIFF_TV(dst->ru_utime, add->ru_utime, sub->ru_utime);
+	INSTR_TIME_ACCUM_DIFF_TV(dst->ru_stime, add->ru_stime, sub->ru_stime);
 	dst->ru_minflt   += add->ru_minflt   - sub->ru_minflt;
 	dst->ru_majflt   += add->ru_majflt   - sub->ru_majflt;
 	dst->ru_nswap    += add->ru_nswap    - sub->ru_nswap;

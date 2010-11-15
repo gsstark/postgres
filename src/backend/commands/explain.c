@@ -1108,8 +1108,8 @@ ExplainNode(PlanState *planstate, List *ancestors,
 	{
 		const struct rusage *usage = &planstate->instrument->rusage;
 
-		bool has_rusage = (!INSTR_TIME_IS_ZERO(usage->ru_stime) || 
-						   !INSTR_TIME_IS_ZERO(usage->ru_utime) || 
+		bool has_rusage = (!INSTR_TIME_IS_ZERO_TV(usage->ru_stime) || 
+						   !INSTR_TIME_IS_ZERO_TV(usage->ru_utime) || 
 						   usage->ru_inblock > 0 || 
 						   usage->ru_oublock > 0);
 		bool has_verbose_rusage = (usage->ru_minflt   > 0 || 
@@ -1126,15 +1126,15 @@ ExplainNode(PlanState *planstate, List *ancestors,
 			appendStringInfoSpaces(es->str, es->indent *2);
 			appendStringInfoString(es->str, "Resources:");
 			
-			if (!INSTR_TIME_IS_ZERO(usage->ru_stime)) 
+			if (!INSTR_TIME_IS_ZERO_TV(usage->ru_stime)) 
 			{
-				double stime = INSTR_TIME_GET_DOUBLE(usage->ru_stime);
+				double stime = INSTR_TIME_GET_DOUBLE_TV(usage->ru_stime);
 				appendStringInfo(es->str, " sys=%.3fms", stime * 1000);
 			}
 			
-			if (!INSTR_TIME_IS_ZERO(usage->ru_utime)) 
+			if (!INSTR_TIME_IS_ZERO_TV(usage->ru_utime)) 
 			{
-				double utime = INSTR_TIME_GET_DOUBLE(usage->ru_utime);
+				double utime = INSTR_TIME_GET_DOUBLE_TV(usage->ru_utime);
 				appendStringInfo(es->str, " user=%.3fms", utime * 1000);
 			}
 			
@@ -1180,8 +1180,8 @@ ExplainNode(PlanState *planstate, List *ancestors,
 	{
 		const struct rusage *usage = &planstate->instrument->rusage;
 
-		ExplainPropertyFloat("User Time", INSTR_TIME_GET_DOUBLE(usage->ru_utime), 3, es);
-		ExplainPropertyFloat("System Time", INSTR_TIME_GET_DOUBLE(usage->ru_stime), 3, es);
+		ExplainPropertyFloat("User Time", INSTR_TIME_GET_DOUBLE_TV(usage->ru_utime), 3, es);
+		ExplainPropertyFloat("System Time", INSTR_TIME_GET_DOUBLE_TV(usage->ru_stime), 3, es);
 		ExplainPropertyLong("Minor Page Faults", usage->ru_minflt, es);
 		ExplainPropertyLong("Major Page Faults", usage->ru_majflt, es);
 		ExplainPropertyLong("Swaps", usage->ru_nswap, es);
