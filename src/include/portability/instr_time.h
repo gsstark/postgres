@@ -118,63 +118,6 @@ typedef struct timeval instr_time;
 
 #ifndef WIN32
 
-#define INSTR_TIME_IS_ZERO_TV(t)	((t).tv_usec == 0 && (t).tv_sec == 0)
-
-#define INSTR_TIME_SET_ZERO_TV(t)	((t).tv_sec = 0, (t).tv_usec = 0)
-
-#define INSTR_TIME_SET_CURRENT_TV(t)	gettimeofday(&(t), NULL)
-
-#define INSTR_TIME_ADD_TV(x,y) \
-	do { \
-		(x).tv_sec += (y).tv_sec; \
-		(x).tv_usec += (y).tv_usec; \
-		/* Normalize */ \
-		while ((x).tv_usec >= 1000000) \
-		{ \
-			(x).tv_usec -= 1000000; \
-			(x).tv_sec++; \
-		} \
-	} while (0)
-
-#define INSTR_TIME_SUBTRACT_TV(x,y) \
-	do { \
-		(x).tv_sec -= (y).tv_sec; \
-		(x).tv_usec -= (y).tv_usec; \
-		/* Normalize */ \
-		while ((x).tv_usec < 0) \
-		{ \
-			(x).tv_usec += 1000000; \
-			(x).tv_sec--; \
-		} \
-	} while (0)
-
-#define INSTR_TIME_ACCUM_DIFF_TV(x,y,z) \
-	do { \
-		(x).tv_sec += (y).tv_sec - (z).tv_sec; \
-		(x).tv_usec += (y).tv_usec - (z).tv_usec; \
-		/* Normalize after each add to avoid overflow/underflow of tv_usec */ \
-		while ((x).tv_usec < 0) \
-		{ \
-			(x).tv_usec += 1000000; \
-			(x).tv_sec--; \
-		} \
-		while ((x).tv_usec >= 1000000) \
-		{ \
-			(x).tv_usec -= 1000000; \
-			(x).tv_sec++; \
-		} \
-	} while (0)
-
-#define INSTR_TIME_GET_DOUBLE_TV(t) \
-	(((double) (t).tv_sec) + ((double) (t).tv_usec) / 1000000.0)
-
-#define INSTR_TIME_GET_MILLISEC_TV(t) \
-	(((double) (t).tv_sec * 1000.0) + ((double) (t).tv_usec) / 1000.0)
-
-#define INSTR_TIME_GET_MICROSEC_TV(t) \
-
-#ifndef WIN32
-
 #define INSTR_TIME_IS_ZERO(t) INSTR_TIME_IS_ZERO_TV(t)
 #define INSTR_TIME_SET_ZERO(t) INSTR_TIME_SET_ZERO_TV(t)
 #define INSTR_TIME_SET_CURRENT(t) INSTR_TIME_SET_CURRENT_TV(t)
