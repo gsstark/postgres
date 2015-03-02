@@ -25,14 +25,20 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
+#include "access/htup_details.h"
 #include "catalog/pg_collation.h"
+#include "catalog/pg_type.h"
+#include "catalog/objectaddress.h"
+#include "funcapi.h"
 #include "libpq/ip.h"
 #include "libpq/libpq.h"
+#include "miscadmin.h"
 #include "postmaster/postmaster.h"
 #include "regex/regex.h"
 #include "replication/walsender.h"
 #include "storage/fd.h"
 #include "utils/acl.h"
+#include "utils/builtins.h"
 #include "utils/guc.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
@@ -2219,4 +2225,408 @@ void
 hba_getauthmethod(hbaPort *port)
 {
 	check_hba(port);
+}
+
+/*
+ * Fill in suitable values to build a tuple representing the
+ * HbaLine provided
+ */
+static void
+hba_getvalues_for_line(HbaLine *hba, Datum *values, bool *nulls)
+{
+	ListCell   *dbcell;
+	char		buffer[NI_MAXHOST];
+	StringInfoData str;
+	HbaToken   *tok;
+	int			index = 0;
+	List	   *options = NULL;
+
+	/* connection type */
+	switch (hba->conntype)
+	{
+		case ctLocal:
+			values[index] = CStringGetTextDatum("local");
+			break;
+		case ctHost:
+			values[index] = CStringGetTextDatum("host");
+			break;
+		case ctHostSSL:
+			values[index] = CStringGetTextDatum("hostssl");
+			break;
+		case ctHostNoSSL:
+			values[index] = CStringGetTextDatum("hostnossl");
+			break;
+		default:
+			nulls[index] = true;
+			break;
+	}
+
+	/* database */
+	index++;
+	if (list_length(hba->databases) != 0)
+	{
+		List	   *names = NULL;
+
+		foreach(dbcell, hba->databases)
+		{
+			tok = lfirst(dbcell);
+			names = lappend(names, tok->string);
+		}
+
+		values[index] = PointerGetDatum(strlist_to_textarray(names));
+	}
+	else
+		nulls[index] = true;
+
+	/* user */
+	index++;
+	if (list_length(hba->roles) != 0)
+	{
+		List	   *roles = NULL;
+
+		foreach(dbcell, hba->roles)
+		{
+			tok = lfirst(dbcell);
+			roles = lappend(roles, tok->string);
+		}
+
+		values[index] = PointerGetDatum(strlist_to_textarray(roles));
+	}
+	else
+		nulls[index] = true;
+
+	/* address */
+	index++;
+	if (pg_getnameinfo_all(&hba->addr, sizeof(struct sockaddr_storage), buffer, sizeof(buffer), NULL, 0, NI_NUMERICHOST) == 0)
+	{
+		clean_ipv6_addr(hba->addr.ss_family, buffer);
+		values[index] = DirectFunctionCall1(inet_in, CStringGetDatum(buffer));
+	}
+	else
+		nulls[index] = true;
+
+	/* mask */
+	index++;
+	if (pg_getnameinfo_all(&hba->mask, sizeof(struct sockaddr_storage), buffer, sizeof(buffer), NULL, 0, NI_NUMERICHOST) == 0)
+	{
+		clean_ipv6_addr(hba->addr.ss_family, buffer);
+		values[index] = DirectFunctionCall1(inet_in, CStringGetDatum(buffer));
+	}
+	else
+		nulls[index] = true;
+
+	/* compare method */
+	index++;
+	switch (hba->ip_cmp_method)
+	{
+		case ipCmpMask:
+			values[index] = CStringGetTextDatum("mask");
+			break;
+		case ipCmpSameHost:
+			values[index] = CStringGetTextDatum("samehost");
+			break;
+		case ipCmpSameNet:
+			values[index] = CStringGetTextDatum("samenet");
+			break;
+		case ipCmpAll:
+			values[index] = CStringGetTextDatum("all");
+			break;
+		default:
+			nulls[index] = true;
+			break;
+	}
+
+	/* hostname */
+	index++;
+	if (hba->hostname)
+		values[index] = CStringGetTextDatum(hba->hostname);
+	else
+		nulls[index] = true;
+
+	/* method */
+	index++;
+	switch (hba->auth_method)
+	{
+		case uaReject:
+			values[index] = CStringGetTextDatum("reject");
+			break;
+		case uaImplicitReject:
+			values[index] = CStringGetTextDatum("implicitreject");
+			break;
+		case uaTrust:
+			values[index] = CStringGetTextDatum("trust");
+			break;
+		case uaIdent:
+			values[index] = CStringGetTextDatum("ident");
+			break;
+		case uaPassword:
+			values[index] = CStringGetTextDatum("password");
+			break;
+		case uaMD5:
+			values[index] = CStringGetTextDatum("md5");
+			break;
+		case uaGSS:
+			values[index] = CStringGetTextDatum("gss");
+			break;
+		case uaSSPI:
+			values[index] = CStringGetTextDatum("sspi");
+			break;
+		case uaPAM:
+			values[index] = CStringGetTextDatum("pam");
+			break;
+		case uaLDAP:
+			values[index] = CStringGetTextDatum("ldap");
+			break;
+		case uaCert:
+			values[index] = CStringGetTextDatum("cert");
+			break;
+		case uaRADIUS:
+			values[index] = CStringGetTextDatum("radius");
+			break;
+		case uaPeer:
+			values[index] = CStringGetTextDatum("peer");
+			break;
+		default:
+			nulls[index] = true;
+			break;
+	}
+
+	/* options */
+	index++;
+
+	if (hba->auth_method == uaGSS || hba->auth_method == uaSSPI)
+	{
+		initStringInfo(&str);
+
+		if (hba->include_realm)
+			appendStringInfoString(&str, "include_realm=true,");
+
+		if (hba->krb_realm)
+		{
+			appendStringInfoString(&str, "krb_realm=");
+			appendStringInfoString(&str, hba->krb_realm);
+			appendStringInfoString(&str, ",");
+		}
+
+		if (str.len > 1)
+			str.data[str.len - 1] = '\0';
+
+		options = lappend(options, str.data);
+	}
+
+	if ((hba->usermap)
+		&& (hba->auth_method == uaIdent || hba->auth_method == uaPeer
+			|| hba->auth_method == uaCert || hba->auth_method == uaGSS
+			|| hba->auth_method == uaSSPI))
+	{
+		initStringInfo(&str);
+		appendStringInfoString(&str, "map=");
+		appendStringInfoString(&str, hba->usermap);
+		options = lappend(options, str.data);
+	}
+
+	if (hba->auth_method == uaLDAP)
+	{
+		initStringInfo(&str);
+		if (hba->ldapserver)
+		{
+			appendStringInfoString(&str, "ldapserver=");
+			appendStringInfoString(&str, hba->ldapserver);
+			appendStringInfoString(&str, ",");
+		}
+
+		if (hba->ldapport)
+		{
+			snprintf(buffer, sizeof(buffer), "%d", hba->ldapport);
+			appendStringInfoString(&str, "ldapport=");
+			appendStringInfoString(&str, buffer);
+			appendStringInfoString(&str, ",");
+		}
+
+		if (hba->ldaptls)
+			appendStringInfoString(&str, "ldaptls=true,");
+
+		if (hba->ldapprefix)
+		{
+			appendStringInfoString(&str, "ldapprefix=");
+			appendStringInfoString(&str, hba->ldapprefix);
+			appendStringInfoString(&str, ",");
+		}
+
+		if (hba->ldapsuffix)
+		{
+			appendStringInfoString(&str, "ldapsuffix=");
+			appendStringInfoString(&str, hba->ldapsuffix);
+			appendStringInfoString(&str, ",");
+		}
+
+		if (hba->ldapbasedn)
+		{
+			appendStringInfoString(&str, "ldapbasedn=");
+			appendStringInfoString(&str, hba->ldapbasedn);
+			appendStringInfoString(&str, ",");
+		}
+
+		if (hba->ldapbinddn)
+		{
+			appendStringInfoString(&str, "ldapbinddn=");
+			appendStringInfoString(&str, hba->ldapbinddn);
+			appendStringInfoString(&str, ",");
+		}
+
+		if (hba->ldapbindpasswd)
+		{
+			appendStringInfoString(&str, "ldapbindpasswd=");
+			appendStringInfoString(&str, hba->ldapbindpasswd);
+			appendStringInfoString(&str, ",");
+		}
+
+		if (hba->ldapsearchattribute)
+		{
+			appendStringInfoString(&str, "ldapsearchattribute=");
+			appendStringInfoString(&str, hba->ldapsearchattribute);
+			appendStringInfoString(&str, ",");
+		}
+
+		if (hba->ldapscope)
+		{
+			snprintf(buffer, sizeof(buffer), "%d", hba->ldapscope);
+			appendStringInfoString(&str, "ldapscope=");
+			appendStringInfoString(&str, buffer);
+			appendStringInfoString(&str, ",");
+		}
+
+		if (str.len > 1)
+			str.data[str.len - 1] = '\0';
+
+		options = lappend(options, str.data);
+	}
+
+	if (hba->auth_method == uaRADIUS)
+	{
+		initStringInfo(&str);
+		if (hba->radiusserver)
+		{
+			appendStringInfoString(&str, "radiusserver=");
+			appendStringInfoString(&str, hba->radiusserver);
+			appendStringInfoString(&str, ",");
+		}
+
+		if (hba->radiussecret)
+		{
+			appendStringInfoString(&str, "radiussecret=");
+			appendStringInfoString(&str, hba->radiussecret);
+			appendStringInfoString(&str, ",");
+		}
+
+		if (hba->radiusidentifier)
+		{
+			appendStringInfoString(&str, "radiusidentifier=");
+			appendStringInfoString(&str, hba->radiusidentifier);
+			appendStringInfoString(&str, ",");
+		}
+
+		if (hba->radiusport)
+		{
+			snprintf(buffer, sizeof(buffer), "%d", hba->radiusport);
+			appendStringInfoString(&str, "radiusport=");
+			appendStringInfoString(&str, buffer);
+			appendStringInfoString(&str, ",");
+		}
+
+		if (str.len > 1)
+			str.data[str.len - 1] = '\0';
+
+		options = lappend(options, str.data);
+	}
+
+	if (options)
+		values[index] = PointerGetDatum(strlist_to_textarray(options));
+	else
+		nulls[index] = true;
+
+	/* line_number */
+	index++;
+	values[index] = Int32GetDatum(hba->linenumber);
+}
+
+#define NUM_PG_HBA_SETTINGS_ATTS   10
+
+Datum
+hba_settings(PG_FUNCTION_ARGS)
+{
+	Tuplestorestate *tuple_store;
+	TupleDesc	tupdesc;
+	ListCell   *line;
+	MemoryContext old_cxt;
+
+	ReturnSetInfo *rsi = (ReturnSetInfo *) fcinfo->resultinfo;
+	
+	if (!rsi || !IsA(rsi, ReturnSetInfo) ||
+		(rsi->allowedModes & SFRM_Materialize) == 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("set-valued function called in context that "
+						"cannot accept a set")));
+
+	rsi->returnMode = SFRM_Materialize;
+
+	old_cxt = MemoryContextSwitchTo(rsi->econtext->ecxt_per_query_memory);
+
+	/*
+	 * need a tuple descriptor representing NUM_PG_HBA_SETTINGS_ATTS
+	 * columns of the appropriate types
+	 */
+	tupdesc = CreateTemplateTupleDesc(NUM_PG_HBA_SETTINGS_ATTS, false);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 1, "type",
+					   TEXTOID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 2, "database",
+					   TEXTARRAYOID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 3, "user",
+					   TEXTARRAYOID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 4, "address",
+					   INETOID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 5, "mask",
+					   INETOID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 6, "compare_method",
+					   TEXTOID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 7, "hostname",
+					   TEXTOID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 8, "method",
+					   TEXTOID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 9, "options",
+					   TEXTARRAYOID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 10, "line_number",
+					   INT4OID, -1, 0);
+	
+	BlessTupleDesc(tupdesc);
+
+	tuple_store =
+		tuplestore_begin_heap(rsi->allowedModes & SFRM_Materialize_Random,
+							  false, work_mem);
+
+	MemoryContextSwitchTo(old_cxt);
+
+	foreach(line, parsed_hba_lines)
+	{
+		HbaLine *hba = (HbaLine *) lfirst(line);
+		Datum		values[NUM_PG_HBA_SETTINGS_ATTS];
+		bool		nulls[NUM_PG_HBA_SETTINGS_ATTS];
+		HeapTuple	tuple;
+
+		MemSet(values, 0, sizeof(values));
+		MemSet(nulls, 0, sizeof(nulls));
+
+		/* Get the next parsed hba line values */
+		hba_getvalues_for_line(hba, values, nulls);
+
+		/* build a tuple */
+		tuple = heap_form_tuple(tupdesc, values, nulls);
+		tuplestore_puttuple(tuple_store, tuple);
+	}
+
+	rsi->setDesc = tupdesc;
+	rsi->setResult = tuple_store;
+
+	PG_RETURN_NULL();
 }

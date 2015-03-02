@@ -103,5 +103,4 @@ extern int check_usermap(const char *usermap_name,
 			  const char *pg_role, const char *auth_user,
 			  bool case_sensitive);
 extern bool pg_isblank(const char c);
-
 #endif   /* HBA_H */

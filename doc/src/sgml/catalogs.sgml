@@ -7384,6 +7384,11 @@
       <entry>views</entry>
      </row>
 
+     <row>
+      <entry><link linkend="view-pg-hba-settings"><structname>pg_hba_settings</structname></link></entry>
+      <entry>client authentication settings</entry>
+     </row>
+
     </tbody>
    </tgroup>
   </table>
@@ -9682,4 +9687,86 @@ SELECT * FROM pg_locks pl LEFT JOIN pg_prepared_xacts ppx
 
  </sect1>
 
+ <sect1 id="view-pg-hba-settings">
+  <title><structname>pg_hba_settings</structname></title>
+
+  <indexterm zone="view-pg-hba-settings">
+   <primary>pg_hba_settings</primary>
+  </indexterm>
+
+  <para>
+   The read-only <structname>pg_hba_settings</structname> view provides
+   access to the client authentication configuration from pg_hba.conf.
+   Access to this view is limited to superusers. 
+  </para>
+
+  <table>
+   <title><structname>pg_hba_settings</> Columns</title>
+
+   <tgroup cols="3">
+    <thead>
+     <row>
+      <entry>Name</entry>
+      <entry>Type</entry>
+      <entry>Description</entry>
+     </row>
+    </thead>
+    <tbody>
+     <row>
+      <entry><structfield>type</structfield></entry>
+      <entry><type>text</type></entry>
+      <entry>Type of connection</entry>
+     </row>
+     <row>
+      <entry><structfield>database</structfield></entry>
+      <entry><type>text[]</type></entry>
+      <entry>List of database names</entry>
+     </row>
+     <row>
+      <entry><structfield>user</structfield></entry>
+      <entry><type>text[]</type></entry>
+      <entry>List of user names</entry>
+     </row>
+     <row>
+      <entry><structfield>address</structfield></entry>
+      <entry><type>inet</type></entry>
+      <entry>Client machine address</entry>
+     </row>
+     <row>
+      <entry><structfield>mask</structfield></entry>
+      <entry><type>inet</type></entry>
+      <entry>IP Mask</entry>
+     </row>
+     <row>
+      <entry><structfield>compare_method</structfield></entry>
+      <entry><type>text</type></entry>
+      <entry>IP address comparison method</entry>
+     </row>
+     <row>
+      <entry><structfield>hostname</structfield></entry>
+      <entry><type>text</type></entry>
+      <entry>Client host name</entry>
+     </row>
+     <row>
+      <entry><structfield>method</structfield></entry>
+      <entry><type>text</type></entry>
+      <entry>Authentication method</entry>
+     </row>
+     <row>
+      <entry><structfield>options</structfield></entry>
+      <entry><type>text[]</type></entry>
+      <entry>Configuration options set for authentication method</entry>
+     </row>
+     <row>
+      <entry><structfield>line_number</structfield></entry>
+      <entry><type>integer</type></entry>
+      <entry>
+       Line number within client authentication configuration file 
+       the current value was set at
+      </entry>
+     </row>
+    </tbody>
+   </tgroup>
+  </table>
+ </sect1>
 </chapter>
