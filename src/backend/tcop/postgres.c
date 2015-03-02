@@ -3996,6 +3996,14 @@ PostgresMain(int argc, char *argv[],
 		{
 			got_SIGHUP = false;
 			ProcessConfigFile(PGC_SIGHUP);
+			
+			/* 
+			 * Reload authentication config files too to refresh 
+			 * pg_hba_settings view data.
+			 */
+			if (!load_hba())
+				ereport(WARNING,
+					(errmsg("pg_hba.conf not reloaded")));
 		}
 
 		/*
