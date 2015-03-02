@@ -103,5 +103,6 @@ extern int check_usermap(const char *usermap_name,
 			  const char *pg_role, const char *auth_user,
 			  bool case_sensitive);
 extern bool pg_isblank(const char c);
-
+extern void hba_getvaluesbyline(int linenum, Datum *values, bool *nulls);
+extern int	hba_getnumlines(void);
 #endif   /* HBA_H */
