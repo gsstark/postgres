@@ -2241,8 +2241,8 @@ hba_getvalues_for_line(HbaLine *hba, Datum *values, bool *nulls)
 	char		buffer[NI_MAXHOST];
 	StringInfoData str;
 	int			index = 0;
-	int         noptions;
-	Datum       options[MAX_OPTIONS];
+	int			noptions;
+	Datum		options[MAX_OPTIONS];
 
 	/* connection type */
 	switch (hba->conntype)
@@ -2268,9 +2268,9 @@ hba_getvalues_for_line(HbaLine *hba, Datum *values, bool *nulls)
 	index++;
 	if (list_length(hba->databases) != 0)
 	{
-		int         j = 0;
+		int			j = 0;
 		HbaToken   *tok;
-		Datum      *names = palloc(sizeof(Datum) * list_length(hba->databases));
+		Datum	   *names = palloc(sizeof(Datum) * list_length(hba->databases));
 
 		foreach(dbcell, hba->databases)
 		{
@@ -2279,7 +2279,7 @@ hba_getvalues_for_line(HbaLine *hba, Datum *values, bool *nulls)
 		}
 
 		values[index] = PointerGetDatum(
-			construct_array(names, list_length(hba->databases), TEXTOID, -1, false, 'i'));
+										construct_array(names, list_length(hba->databases), TEXTOID, -1, false, 'i'));
 	}
 	else
 		nulls[index] = true;
@@ -2288,7 +2288,7 @@ hba_getvalues_for_line(HbaLine *hba, Datum *values, bool *nulls)
 	index++;
 	if (list_length(hba->roles) != 0)
 	{
-		int        j = 0;
+		int			j = 0;
 		HbaToken   *tok;
 		Datum	   *roles = palloc(sizeof(Datum) * list_length(hba->roles));
 
@@ -2299,7 +2299,7 @@ hba_getvalues_for_line(HbaLine *hba, Datum *values, bool *nulls)
 		}
 
 		values[index] = PointerGetDatum(
-			construct_array(roles, list_length(hba->roles), TEXTOID, -1, false, 'i'));
+										construct_array(roles, list_length(hba->roles), TEXTOID, -1, false, 'i'));
 	}
 	else
 		nulls[index] = true;
@@ -2328,13 +2328,13 @@ hba_getvalues_for_line(HbaLine *hba, Datum *values, bool *nulls)
 	index++;
 	if (hba->conntype == ctLocal)
 		nulls[index] = true;
-	else if (hba->ip_cmp_method ==  ipCmpMask)
+	else if (hba->ip_cmp_method == ipCmpMask)
 		values[index] = CStringGetTextDatum("mask");
-	else if (hba->ip_cmp_method ==  ipCmpSameHost)
+	else if (hba->ip_cmp_method == ipCmpSameHost)
 		values[index] = CStringGetTextDatum("samehost");
-	else if (hba->ip_cmp_method ==  ipCmpSameNet)
+	else if (hba->ip_cmp_method == ipCmpSameNet)
 		values[index] = CStringGetTextDatum("samenet");
-	else if (hba->ip_cmp_method ==  ipCmpAll)
+	else if (hba->ip_cmp_method == ipCmpAll)
 		values[index] = CStringGetTextDatum("all");
 	else
 		elog(ERROR, "Unexpected Compare Method in parsed HBA entry");
@@ -2397,12 +2397,12 @@ hba_getvalues_for_line(HbaLine *hba, Datum *values, bool *nulls)
 	/* options */
 	index++;
 	noptions = 0;
-	
+
 	if (hba->auth_method == uaGSS || hba->auth_method == uaSSPI)
 	{
 		if (hba->include_realm)
 			options[noptions++] = CStringGetTextDatum("include_realm=true");
-		
+
 		if (hba->krb_realm)
 		{
 			initStringInfo(&str);
@@ -2539,7 +2539,7 @@ hba_getvalues_for_line(HbaLine *hba, Datum *values, bool *nulls)
 	Assert(noptions <= MAX_OPTIONS);
 	if (noptions)
 		values[index] = PointerGetDatum(
-			construct_array(options, noptions, TEXTOID, -1, false, 'i'));
+				construct_array(options, noptions, TEXTOID, -1, false, 'i'));
 	else
 		/* Probably should be {} but that makes for a messy looking view */
 		nulls[index] = true;
@@ -2552,7 +2552,7 @@ hba_getvalues_for_line(HbaLine *hba, Datum *values, bool *nulls)
 
 #define NUM_PG_HBA_SETTINGS_ATTS   10
 
-/* 
+/*
  * SQL-accessible SRF to return all the settings from the pg_hba.conf
  * file. See the pga_hba_settings view in the "System Catalogs" section of the
  * manual.
@@ -2566,13 +2566,14 @@ hba_settings(PG_FUNCTION_ARGS)
 	ListCell   *line;
 	MemoryContext old_cxt;
 
-	/* We must use the Materialize mode to be safe against HBA file reloads
+	/*
+	 * We must use the Materialize mode to be safe against HBA file reloads
 	 * while the cursor is open. It's also more efficient than having to look
-	 * up our current position in the parsed list every time. 
+	 * up our current position in the parsed list every time.
 	 */
 
 	ReturnSetInfo *rsi = (ReturnSetInfo *) fcinfo->resultinfo;
-	
+
 	if (!rsi || !IsA(rsi, ReturnSetInfo) ||
 		(rsi->allowedModes & SFRM_Materialize) == 0)
 		ereport(ERROR,
@@ -2582,9 +2583,10 @@ hba_settings(PG_FUNCTION_ARGS)
 
 	rsi->returnMode = SFRM_Materialize;
 
-	/* Create the tupledesc and tuplestore in the per_query context as
+	/*
+	 * Create the tupledesc and tuplestore in the per_query context as
 	 * required for SFRM_Materialize.
-	 */ 
+	 */
 	old_cxt = MemoryContextSwitchTo(rsi->econtext->ecxt_per_query_memory);
 
 	tupdesc = CreateTemplateTupleDesc(NUM_PG_HBA_SETTINGS_ATTS, false);
@@ -2616,13 +2618,14 @@ hba_settings(PG_FUNCTION_ARGS)
 
 	MemoryContextSwitchTo(old_cxt);
 
-	/* Loop through the list and deparse each entry as it comes, storing it in
+	/*
+	 * Loop through the list and deparse each entry as it comes, storing it in
 	 * the tuplestore. Any temporary memory allocations here live only for the
 	 * function call lifetime.
 	 */
 	foreach(line, parsed_hba_lines)
 	{
-		HbaLine *hba = (HbaLine *) lfirst(line);
+		HbaLine    *hba = (HbaLine *) lfirst(line);
 		Datum		values[NUM_PG_HBA_SETTINGS_ATTS];
 		bool		nulls[NUM_PG_HBA_SETTINGS_ATTS];
 		HeapTuple	tuple;
