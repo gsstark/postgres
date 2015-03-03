@@ -28,7 +28,6 @@
 #include "access/htup_details.h"
 #include "catalog/pg_collation.h"
 #include "catalog/pg_type.h"
-#include "catalog/objectaddress.h"
 #include "funcapi.h"
 #include "libpq/ip.h"
 #include "libpq/libpq.h"
@@ -2227,6 +2226,10 @@ hba_getauthmethod(hbaPort *port)
 	check_hba(port);
 }
 
+
+/* LDAP supports 10 currently, keep this well above the most any method needs */
+#define MAX_OPTIONS 16
+
 /*
  * Fill in suitable values to build a tuple representing the
  * HbaLine provided
@@ -2237,9 +2240,9 @@ hba_getvalues_for_line(HbaLine *hba, Datum *values, bool *nulls)
 	ListCell   *dbcell;
 	char		buffer[NI_MAXHOST];
 	StringInfoData str;
-	HbaToken   *tok;
 	int			index = 0;
-	List	   *options = NULL;
+	int         noptions;
+	Datum       options[MAX_OPTIONS];
 
 	/* connection type */
 	switch (hba->conntype)
@@ -2257,7 +2260,7 @@ hba_getvalues_for_line(HbaLine *hba, Datum *values, bool *nulls)
 			values[index] = CStringGetTextDatum("hostnossl");
 			break;
 		default:
-			nulls[index] = true;
+			elog(ERROR, "Unexpected Connection Type in parsed HBA entry");
 			break;
 	}
 
@@ -2265,15 +2268,18 @@ hba_getvalues_for_line(HbaLine *hba, Datum *values, bool *nulls)
 	index++;
 	if (list_length(hba->databases) != 0)
 	{
-		List	   *names = NULL;
+		int         j = 0;
+		HbaToken   *tok;
+		Datum      *names = palloc(sizeof(Datum) * list_length(hba->databases));
 
 		foreach(dbcell, hba->databases)
 		{
 			tok = lfirst(dbcell);
-			names = lappend(names, tok->string);
+			names[j++] = CStringGetTextDatum(tok->string);
 		}
 
-		values[index] = PointerGetDatum(strlist_to_textarray(names));
+		values[index] = PointerGetDatum(
+			construct_array(names, list_length(hba->databases), TEXTOID, -1, false, 'i'));
 	}
 	else
 		nulls[index] = true;
@@ -2282,15 +2288,18 @@ hba_getvalues_for_line(HbaLine *hba, Datum *values, bool *nulls)
 	index++;
 	if (list_length(hba->roles) != 0)
 	{
-		List	   *roles = NULL;
+		int        j = 0;
+		HbaToken   *tok;
+		Datum	   *roles = palloc(sizeof(Datum) * list_length(hba->roles));
 
 		foreach(dbcell, hba->roles)
 		{
 			tok = lfirst(dbcell);
-			roles = lappend(roles, tok->string);
+			roles[j++] = CStringGetTextDatum(tok->string);
 		}
 
-		values[index] = PointerGetDatum(strlist_to_textarray(roles));
+		values[index] = PointerGetDatum(
+			construct_array(roles, list_length(hba->roles), TEXTOID, -1, false, 'i'));
 	}
 	else
 		nulls[index] = true;
@@ -2317,24 +2326,18 @@ hba_getvalues_for_line(HbaLine *hba, Datum *values, bool *nulls)
 
 	/* compare method */
 	index++;
-	switch (hba->ip_cmp_method)
-	{
-		case ipCmpMask:
-			values[index] = CStringGetTextDatum("mask");
-			break;
-		case ipCmpSameHost:
-			values[index] = CStringGetTextDatum("samehost");
-			break;
-		case ipCmpSameNet:
-			values[index] = CStringGetTextDatum("samenet");
-			break;
-		case ipCmpAll:
-			values[index] = CStringGetTextDatum("all");
-			break;
-		default:
-			nulls[index] = true;
-			break;
-	}
+	if (hba->conntype == ctLocal)
+		nulls[index] = true;
+	else if (hba->ip_cmp_method ==  ipCmpMask)
+		values[index] = CStringGetTextDatum("mask");
+	else if (hba->ip_cmp_method ==  ipCmpSameHost)
+		values[index] = CStringGetTextDatum("samehost");
+	else if (hba->ip_cmp_method ==  ipCmpSameNet)
+		values[index] = CStringGetTextDatum("samenet");
+	else if (hba->ip_cmp_method ==  ipCmpAll)
+		values[index] = CStringGetTextDatum("all");
+	else
+		elog(ERROR, "Unexpected Compare Method in parsed HBA entry");
 
 	/* hostname */
 	index++;
@@ -2387,162 +2390,158 @@ hba_getvalues_for_line(HbaLine *hba, Datum *values, bool *nulls)
 			values[index] = CStringGetTextDatum("peer");
 			break;
 		default:
-			nulls[index] = true;
+			elog(ERROR, "Unexpected Auth Method in parsed HBA entry");
 			break;
 	}
 
 	/* options */
 	index++;
-
+	noptions = 0;
+	
 	if (hba->auth_method == uaGSS || hba->auth_method == uaSSPI)
 	{
-		initStringInfo(&str);
-
 		if (hba->include_realm)
-			appendStringInfoString(&str, "include_realm=true,");
-
+			options[noptions++] = CStringGetTextDatum("include_realm=true");
+		
 		if (hba->krb_realm)
 		{
+			initStringInfo(&str);
 			appendStringInfoString(&str, "krb_realm=");
 			appendStringInfoString(&str, hba->krb_realm);
-			appendStringInfoString(&str, ",");
+			options[noptions++] = CStringGetTextDatum(str.data);
 		}
-
-		if (str.len > 1)
-			str.data[str.len - 1] = '\0';
-
-		options = lappend(options, str.data);
 	}
 
-	if ((hba->usermap)
-		&& (hba->auth_method == uaIdent || hba->auth_method == uaPeer
-			|| hba->auth_method == uaCert || hba->auth_method == uaGSS
-			|| hba->auth_method == uaSSPI))
+	if (hba->usermap)
 	{
 		initStringInfo(&str);
 		appendStringInfoString(&str, "map=");
 		appendStringInfoString(&str, hba->usermap);
-		options = lappend(options, str.data);
+		options[noptions++] = CStringGetTextDatum(str.data);
 	}
 
 	if (hba->auth_method == uaLDAP)
 	{
-		initStringInfo(&str);
 		if (hba->ldapserver)
 		{
+			initStringInfo(&str);
 			appendStringInfoString(&str, "ldapserver=");
 			appendStringInfoString(&str, hba->ldapserver);
-			appendStringInfoString(&str, ",");
+			options[noptions++] = CStringGetTextDatum(str.data);
 		}
 
 		if (hba->ldapport)
 		{
+			initStringInfo(&str);
 			snprintf(buffer, sizeof(buffer), "%d", hba->ldapport);
 			appendStringInfoString(&str, "ldapport=");
 			appendStringInfoString(&str, buffer);
-			appendStringInfoString(&str, ",");
+			options[noptions++] = CStringGetTextDatum(str.data);
 		}
 
 		if (hba->ldaptls)
-			appendStringInfoString(&str, "ldaptls=true,");
+			options[noptions++] = CStringGetTextDatum("ldaptls=true");
 
 		if (hba->ldapprefix)
 		{
+			initStringInfo(&str);
 			appendStringInfoString(&str, "ldapprefix=");
 			appendStringInfoString(&str, hba->ldapprefix);
-			appendStringInfoString(&str, ",");
+			options[noptions++] = CStringGetTextDatum(str.data);
 		}
 
 		if (hba->ldapsuffix)
 		{
+			initStringInfo(&str);
 			appendStringInfoString(&str, "ldapsuffix=");
 			appendStringInfoString(&str, hba->ldapsuffix);
-			appendStringInfoString(&str, ",");
+			options[noptions++] = CStringGetTextDatum(str.data);
 		}
 
 		if (hba->ldapbasedn)
 		{
+			initStringInfo(&str);
 			appendStringInfoString(&str, "ldapbasedn=");
 			appendStringInfoString(&str, hba->ldapbasedn);
-			appendStringInfoString(&str, ",");
+			options[noptions++] = CStringGetTextDatum(str.data);
 		}
 
 		if (hba->ldapbinddn)
 		{
+			initStringInfo(&str);
 			appendStringInfoString(&str, "ldapbinddn=");
 			appendStringInfoString(&str, hba->ldapbinddn);
-			appendStringInfoString(&str, ",");
+			options[noptions++] = CStringGetTextDatum(str.data);
 		}
 
 		if (hba->ldapbindpasswd)
 		{
+			initStringInfo(&str);
 			appendStringInfoString(&str, "ldapbindpasswd=");
 			appendStringInfoString(&str, hba->ldapbindpasswd);
-			appendStringInfoString(&str, ",");
+			options[noptions++] = CStringGetTextDatum(str.data);
 		}
 
 		if (hba->ldapsearchattribute)
 		{
+			initStringInfo(&str);
 			appendStringInfoString(&str, "ldapsearchattribute=");
 			appendStringInfoString(&str, hba->ldapsearchattribute);
-			appendStringInfoString(&str, ",");
+			options[noptions++] = CStringGetTextDatum(str.data);
 		}
 
 		if (hba->ldapscope)
 		{
+			initStringInfo(&str);
 			snprintf(buffer, sizeof(buffer), "%d", hba->ldapscope);
 			appendStringInfoString(&str, "ldapscope=");
 			appendStringInfoString(&str, buffer);
-			appendStringInfoString(&str, ",");
+			options[noptions++] = CStringGetTextDatum(str.data);
 		}
-
-		if (str.len > 1)
-			str.data[str.len - 1] = '\0';
-
-		options = lappend(options, str.data);
 	}
 
 	if (hba->auth_method == uaRADIUS)
 	{
-		initStringInfo(&str);
 		if (hba->radiusserver)
 		{
+			initStringInfo(&str);
 			appendStringInfoString(&str, "radiusserver=");
 			appendStringInfoString(&str, hba->radiusserver);
-			appendStringInfoString(&str, ",");
+			options[noptions++] = CStringGetTextDatum(str.data);
 		}
 
 		if (hba->radiussecret)
 		{
+			initStringInfo(&str);
 			appendStringInfoString(&str, "radiussecret=");
 			appendStringInfoString(&str, hba->radiussecret);
-			appendStringInfoString(&str, ",");
+			options[noptions++] = CStringGetTextDatum(str.data);
 		}
 
 		if (hba->radiusidentifier)
 		{
+			initStringInfo(&str);
 			appendStringInfoString(&str, "radiusidentifier=");
 			appendStringInfoString(&str, hba->radiusidentifier);
-			appendStringInfoString(&str, ",");
+			options[noptions++] = CStringGetTextDatum(str.data);
 		}
 
 		if (hba->radiusport)
 		{
+			initStringInfo(&str);
 			snprintf(buffer, sizeof(buffer), "%d", hba->radiusport);
 			appendStringInfoString(&str, "radiusport=");
 			appendStringInfoString(&str, buffer);
-			appendStringInfoString(&str, ",");
+			options[noptions++] = CStringGetTextDatum(str.data);
 		}
-
-		if (str.len > 1)
-			str.data[str.len - 1] = '\0';
-
-		options = lappend(options, str.data);
 	}
 
-	if (options)
-		values[index] = PointerGetDatum(strlist_to_textarray(options));
+	Assert(noptions <= MAX_OPTIONS);
+	if (noptions)
+		values[index] = PointerGetDatum(
+			construct_array(options, noptions, TEXTOID, -1, false, 'i'));
 	else
+		/* Probably should be {} but that makes for a messy looking view */
 		nulls[index] = true;
 
 	/* line_number */
@@ -2550,7 +2549,14 @@ hba_getvalues_for_line(HbaLine *hba, Datum *values, bool *nulls)
 	values[index] = Int32GetDatum(hba->linenumber);
 }
 
+
 #define NUM_PG_HBA_SETTINGS_ATTS   10
+
+/* 
+ * SQL-accessible SRF to return all the settings from the pg_hba.conf
+ * file. See the pga_hba_settings view in the "System Catalogs" section of the
+ * manual.
+ */
 
 Datum
 hba_settings(PG_FUNCTION_ARGS)
@@ -2559,6 +2565,11 @@ hba_settings(PG_FUNCTION_ARGS)
 	TupleDesc	tupdesc;
 	ListCell   *line;
 	MemoryContext old_cxt;
+
+	/* We must use the Materialize mode to be safe against HBA file reloads
+	 * while the cursor is open. It's also more efficient than having to look
+	 * up our current position in the parsed list every time. 
+	 */
 
 	ReturnSetInfo *rsi = (ReturnSetInfo *) fcinfo->resultinfo;
 	
@@ -2571,12 +2582,11 @@ hba_settings(PG_FUNCTION_ARGS)
 
 	rsi->returnMode = SFRM_Materialize;
 
+	/* Create the tupledesc and tuplestore in the per_query context as
+	 * required for SFRM_Materialize.
+	 */ 
 	old_cxt = MemoryContextSwitchTo(rsi->econtext->ecxt_per_query_memory);
 
-	/*
-	 * need a tuple descriptor representing NUM_PG_HBA_SETTINGS_ATTS
-	 * columns of the appropriate types
-	 */
 	tupdesc = CreateTemplateTupleDesc(NUM_PG_HBA_SETTINGS_ATTS, false);
 	TupleDescInitEntry(tupdesc, (AttrNumber) 1, "type",
 					   TEXTOID, -1, 0);
@@ -2598,7 +2608,6 @@ hba_settings(PG_FUNCTION_ARGS)
 					   TEXTARRAYOID, -1, 0);
 	TupleDescInitEntry(tupdesc, (AttrNumber) 10, "line_number",
 					   INT4OID, -1, 0);
-	
 	BlessTupleDesc(tupdesc);
 
 	tuple_store =
@@ -2607,6 +2616,10 @@ hba_settings(PG_FUNCTION_ARGS)
 
 	MemoryContextSwitchTo(old_cxt);
 
+	/* Loop through the list and deparse each entry as it comes, storing it in
+	 * the tuplestore. Any temporary memory allocations here live only for the
+	 * function call lifetime.
+	 */
 	foreach(line, parsed_hba_lines)
 	{
 		HbaLine *hba = (HbaLine *) lfirst(line);
