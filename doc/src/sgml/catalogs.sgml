@@ -9732,12 +9732,12 @@ SELECT * FROM pg_locks pl LEFT JOIN pg_prepared_xacts ppx
       <entry>Type of connection</entry>
      </row>
      <row>
-      <entry><structfield>database</structfield></entry>
+      <entry><structfield>databases</structfield></entry>
       <entry><type>text[]</type></entry>
       <entry>List of database names</entry>
      </row>
      <row>
-      <entry><structfield>user</structfield></entry>
+      <entry><structfield>users</structfield></entry>
       <entry><type>text[]</type></entry>
       <entry>List of user names</entry>
      </row>
