@@ -2278,8 +2278,8 @@ hba_getvalues_for_line(HbaLine *hba, Datum *values, bool *nulls)
 			names[j++] = CStringGetTextDatum(tok->string);
 		}
 
-		values[index] = PointerGetDatum(
-										construct_array(names, list_length(hba->databases), TEXTOID, -1, false, 'i'));
+		values[index] = PointerGetDatum(construct_array(names, list_length(hba->databases),
+														TEXTOID, -1, false, 'i'));
 	}
 	else
 		nulls[index] = true;
@@ -2298,15 +2298,18 @@ hba_getvalues_for_line(HbaLine *hba, Datum *values, bool *nulls)
 			roles[j++] = CStringGetTextDatum(tok->string);
 		}
 
-		values[index] = PointerGetDatum(
-										construct_array(roles, list_length(hba->roles), TEXTOID, -1, false, 'i'));
+		values[index] = PointerGetDatum(construct_array(roles, list_length(hba->roles),
+														TEXTOID, -1, false, 'i'));
 	}
 	else
 		nulls[index] = true;
 
 	/* address */
 	index++;
-	if (pg_getnameinfo_all(&hba->addr, sizeof(struct sockaddr_storage), buffer, sizeof(buffer), NULL, 0, NI_NUMERICHOST) == 0)
+	if (pg_getnameinfo_all(&hba->addr, sizeof(struct sockaddr_storage),
+						   buffer, sizeof(buffer),
+						   NULL, 0,
+						   NI_NUMERICHOST) == 0)
 	{
 		clean_ipv6_addr(hba->addr.ss_family, buffer);
 		values[index] = DirectFunctionCall1(inet_in, CStringGetDatum(buffer));
@@ -2316,7 +2319,10 @@ hba_getvalues_for_line(HbaLine *hba, Datum *values, bool *nulls)
 
 	/* mask */
 	index++;
-	if (pg_getnameinfo_all(&hba->mask, sizeof(struct sockaddr_storage), buffer, sizeof(buffer), NULL, 0, NI_NUMERICHOST) == 0)
+	if (pg_getnameinfo_all(&hba->mask, sizeof(struct sockaddr_storage),
+						   buffer, sizeof(buffer),
+						   NULL, 0,
+						   NI_NUMERICHOST) == 0)
 	{
 		clean_ipv6_addr(hba->addr.ss_family, buffer);
 		values[index] = DirectFunctionCall1(inet_in, CStringGetDatum(buffer));
