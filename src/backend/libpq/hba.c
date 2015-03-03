@@ -2264,7 +2264,7 @@ hba_getvalues_for_line(HbaLine *hba, Datum *values, bool *nulls)
 			break;
 	}
 
-	/* database */
+	/* databases */
 	index++;
 	if (list_length(hba->databases) != 0)
 	{
@@ -2284,7 +2284,7 @@ hba_getvalues_for_line(HbaLine *hba, Datum *values, bool *nulls)
 	else
 		nulls[index] = true;
 
-	/* user */
+	/* users */
 	index++;
 	if (list_length(hba->roles) != 0)
 	{
@@ -2598,9 +2598,9 @@ hba_settings(PG_FUNCTION_ARGS)
 	tupdesc = CreateTemplateTupleDesc(NUM_PG_HBA_SETTINGS_ATTS, false);
 	TupleDescInitEntry(tupdesc, (AttrNumber) 1, "type",
 					   TEXTOID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 2, "database",
+	TupleDescInitEntry(tupdesc, (AttrNumber) 2, "databases",
 					   TEXTARRAYOID, -1, 0);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 3, "user",
+	TupleDescInitEntry(tupdesc, (AttrNumber) 3, "users",
 					   TEXTARRAYOID, -1, 0);
 	TupleDescInitEntry(tupdesc, (AttrNumber) 4, "address",
 					   INETOID, -1, 0);

@@ -4002,8 +4002,8 @@ PostgresMain(int argc, char *argv[],
 			 * pg_hba_settings view data.
 			 */
 			if (!load_hba())
-				ereport(WARNING,
-					(errmsg("pg_hba.conf not reloaded")));
+				ereport(LOG,
+					(errmsg("pg_hba.conf not reloaded, pg_hba_settings may show stale information")));
 		}
 
 		/*
