@@ -2265,44 +2265,87 @@ hba_getvalues_for_line(HbaLine *hba, Datum *values, bool *nulls)
 	}
 
 	/* databases */
-	index++;
-	if (list_length(hba->databases) != 0)
 	{
-		int			j = 0;
 		HbaToken   *tok;
-		Datum	   *names = palloc(sizeof(Datum) * list_length(hba->databases));
+		int 		ndatabases = 0,
+					nkeywords = 0,
+					nentries  = list_length(hba->databases);
+		Datum	   *databases = palloc(sizeof(Datum) * nentries);
+		Datum	   *keywords = palloc(sizeof(Datum) * nentries);
 
 		foreach(dbcell, hba->databases)
 		{
 			tok = lfirst(dbcell);
-			names[j++] = CStringGetTextDatum(tok->string);
+			if (token_is_keyword(tok, "all"))
+				keywords[nkeywords++] = CStringGetTextDatum("all");
+			else if (token_is_keyword(tok, "replication"))
+				keywords[nkeywords++] = CStringGetTextDatum("replication");
+			else if (token_is_keyword(tok, "samerole") ||
+					 token_is_keyword(tok, "samegroup"))
+				keywords[nkeywords++] = CStringGetTextDatum("samerole");
+			else
+				databases[ndatabases++] = CStringGetTextDatum(tok->string);
 		}
 
-		values[index] = PointerGetDatum(construct_array(names, list_length(hba->databases),
-														TEXTOID, -1, false, 'i'));
+		index++;
+		if (ndatabases > 0)
+			values[index] = PointerGetDatum(construct_array(databases, ndatabases,
+															TEXTOID, -1, false, 'i'));
+		else
+			nulls[index] = true;
+
+		index++;
+		if (nkeywords > 0)
+			values[index] = PointerGetDatum(construct_array(keywords, nkeywords,
+															TEXTOID, -1, false, 'i'));
+		else
+			nulls[index] = true;
 	}
-	else
-		nulls[index] = true;
 
 	/* users */
-	index++;
-	if (list_length(hba->roles) != 0)
 	{
-		int			j = 0;
 		HbaToken   *tok;
-		Datum	   *roles = palloc(sizeof(Datum) * list_length(hba->roles));
+		int 		nusers = 0,
+					nkeywords = 0,
+					nrecursive = 0,
+					nentries = list_length(hba->roles);
+		Datum	   *users = palloc(sizeof(Datum) * nentries);
+		Datum	   *keywords = palloc(sizeof(Datum) * nentries);
+		Datum	   *recursive = palloc(sizeof(Datum) * nentries);
 
 		foreach(dbcell, hba->roles)
 		{
 			tok = lfirst(dbcell);
-			roles[j++] = CStringGetTextDatum(tok->string);
+
+			if (token_is_keyword(tok, "all"))
+				keywords[nkeywords++] = CStringGetTextDatum("all");
+			else if (!tok->quoted && tok->string[0] == '+')
+				recursive[nrecursive++] = CStringGetTextDatum(tok->string + 1);
+			else
+				users[nusers++] = CStringGetTextDatum(tok->string);
 		}
 
-		values[index] = PointerGetDatum(construct_array(roles, list_length(hba->roles),
-														TEXTOID, -1, false, 'i'));
+		index++;
+		if (nkeywords > 0)
+			values[index] = PointerGetDatum(construct_array(keywords, nkeywords,
+															TEXTOID, -1, false, 'i'));
+		else
+			nulls[index] = true;
+		
+		index++;
+		if (nrecursive > 0)
+			values[index] = PointerGetDatum(construct_array(recursive, nrecursive,
+															TEXTOID, -1, false, 'i'));
+		else
+			nulls[index] = true;
+
+		index++;
+		if (nusers > 0)
+			values[index] = PointerGetDatum(construct_array(users, nusers,
+															TEXTOID, -1, false, 'i'));
+		else
+			nulls[index] = true;
 	}
-	else
-		nulls[index] = true;
 
 	/* address */
 	index++;
@@ -2598,9 +2641,15 @@ hba_settings(PG_FUNCTION_ARGS)
 	tupdesc = CreateTemplateTupleDesc(NUM_PG_HBA_SETTINGS_ATTS, false);
 	TupleDescInitEntry(tupdesc, (AttrNumber) 1, "type",
 					   TEXTOID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 2, "database_keywords",
+					   TEXTARRAYOID, -1, 0);
 	TupleDescInitEntry(tupdesc, (AttrNumber) 2, "databases",
 					   TEXTARRAYOID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 3, "user_keywords",
+					   TEXTARRAYOID, -1, 0);
 	TupleDescInitEntry(tupdesc, (AttrNumber) 3, "users",
+					   TEXTARRAYOID, -1, 0);
+	TupleDescInitEntry(tupdesc, (AttrNumber) 3, "recursive_roles",
 					   TEXTARRAYOID, -1, 0);
 	TupleDescInitEntry(tupdesc, (AttrNumber) 4, "address",
 					   INETOID, -1, 0);
