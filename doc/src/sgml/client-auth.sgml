@@ -680,6 +680,11 @@ local   all             @admins,+support                        md5
 local   db1,db2,@demodbs  all                                   md5
 </programlisting>
    </example>
+
+   <para>
+    The contents of this file are reflected in the pg_hba_conf view.
+    See <xref linkend="view-pg-hba-conf"> for details.
+   </para>
  </sect1>
 
  <sect1 id="auth-username-maps">

@@ -96,6 +96,8 @@ typedef struct IdentLine
 /* kluge to avoid including libpq/libpq-be.h here */
 typedef struct Port hbaPort;
 
+extern bool load_hba_failure;
+
 extern bool load_hba(void);
 extern bool load_ident(void);
 extern void hba_getauthmethod(hbaPort *port);

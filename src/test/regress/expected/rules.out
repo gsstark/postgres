@@ -1315,6 +1315,18 @@ pg_group| SELECT pg_authid.rolname AS groname,
           WHERE (pg_auth_members.roleid = pg_authid.oid)) AS grolist
    FROM pg_authid
   WHERE (NOT pg_authid.rolcanlogin);
+pg_hba_conf| SELECT a.line_number,
+    a.type,
+    a.keyword_databases,
+    a.databases,
+    a.keyword_users,
+    a.users,
+    a.address,
+    a.compare_method,
+    a.hostname,
+    a.method,
+    a.options
+   FROM pg_hba_conf() a(line_number, type, keyword_databases, databases, keyword_users, users, address, compare_method, hostname, method, options);
 pg_indexes| SELECT n.nspname AS schemaname,
     c.relname AS tablename,
     i.relname AS indexname,
