@@ -1,0 +1,5 @@
+# memory_tests extension
+comment = 'A module to *intentionally* crash the database by violating the memory management contracts'
+default_version = '1.0'
+module_pathname = '$libdir/memory_tests'
+relocatable = true
