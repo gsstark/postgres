@@ -1,0 +1,44 @@
+CREATE EXTENSION memory_tests;
+ERROR:  syntax error at or near "("
+SELECT pg_memory_test_read_before();
+ERROR:  function pg_memory_test_read_before() does not exist
+LINE 1: SELECT pg_memory_test_read_before();
+               ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+SELECT pg_memory_test_read_after();
+ERROR:  function pg_memory_test_read_after() does not exist
+LINE 1: SELECT pg_memory_test_read_after();
+               ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+SELECT pg_memory_test_read_undefined();
+ERROR:  function pg_memory_test_read_undefined() does not exist
+LINE 1: SELECT pg_memory_test_read_undefined();
+               ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+SELECT pg_memory_test_write_before();
+ERROR:  function pg_memory_test_write_before() does not exist
+LINE 1: SELECT pg_memory_test_write_before();
+               ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+SELECT pg_memory_test_write_after();
+ERROR:  function pg_memory_test_write_after() does not exist
+LINE 1: SELECT pg_memory_test_write_after();
+               ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+SELECT pg_memory_test_doublefree();
+ERROR:  function pg_memory_test_doublefree() does not exist
+LINE 1: SELECT pg_memory_test_doublefree();
+               ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+SELECT pg_memory_test_read_after_free();
+ERROR:  function pg_memory_test_read_after_free() does not exist
+LINE 1: SELECT pg_memory_test_read_after_free();
+               ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+SELECT pg_memory_test_write_after_free();
+ERROR:  function pg_memory_test_write_after_free() does not exist
+LINE 1: SELECT pg_memory_test_write_after_free();
+               ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+DROP EXTENSION memory_tests;
+ERROR:  extension "memory_tests" does not exist
