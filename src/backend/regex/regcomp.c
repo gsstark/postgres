@@ -154,6 +154,12 @@ static int	combine(struct arc *, struct arc *);
 static void fixempties(struct nfa *, FILE *);
 static struct state *emptyreachable(struct state *, struct state *);
 static void replaceempty(struct nfa *, struct state *, struct state *);
+static void fixconstraintloops(struct nfa *, FILE *);
+static int	findconstraintloop(struct nfa *, struct state *);
+static void breakconstraintloop(struct nfa *, struct state *);
+static struct state *clonesuccessorstate(struct nfa *, struct state *,
+					struct state *, struct state *,
+					struct arc *);
 static void cleanup(struct nfa *);
 static void markreachable(struct nfa *, struct state *, struct state *, struct state *);
 static void markcanreach(struct nfa *, struct state *, struct state *, struct state *);
