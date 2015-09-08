@@ -47,6 +47,32 @@ static void init_locale(const char *categoryname, int category, const char *loca
 static void help(const char *progname);
 static void check_root(const char *progname);
 
+#include "utils/builtins.h"
+#include "catalog/pg_collation.h"
+static void AFL(char *expr) {
+	char buf[1024];
+	size_t len;
+	
+	len = read(0, buf, 1024);
+	buf[len] = '\0';
+	
+	Datum s,p, r;
+	s = CStringGetTextDatum(expr);
+	p = CStringGetTextDatum(buf);
+
+	FunctionCallInfoData fcinfo;
+
+	InitFunctionCallInfoData(fcinfo, NULL, 2, C_COLLATION_OID, NULL, NULL);
+	fcinfo.arg[0] = s;
+	fcinfo.arg[1] = p;
+	fcinfo.argnull[0] = false;
+	fcinfo.argnull[1] = false;
+
+	r = textregexsubstr(&fcinfo);
+	(void)r;
+}
+
+
 
 /*
  * Any Postgres server process begins execution here.
@@ -219,6 +245,13 @@ main(int argc, char *argv[])
 		PostgresMain(argc, argv,
 					 NULL,		/* no dbname */
 					 strdup(get_user_name_or_exit(progname)));	/* does not return */
+	else if (argc > 1 && strcmp(argv[1], "--afl") == 0)
+	{
+		if (argc != 3)
+			abort();
+		AFL(argv[2]);
+		exit(0);
+	}
 	else
 		PostmasterMain(argc, argv);		/* does not return */
 	abort();					/* should not get here */
