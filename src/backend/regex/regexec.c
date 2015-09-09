@@ -433,6 +433,7 @@ cfindloop(struct vars * v,
 	chr		   *cold;
 	chr		   *open;			/* open and close of range of possible starts */
 	chr		   *close;
+	chr		   *thisstart;
 	chr		   *estart;
 	chr		   *estop;
 	int			er;
@@ -445,6 +446,7 @@ cfindloop(struct vars * v,
 	do
 	{
 		MDEBUG(("\ncsearch at %ld\n", LOFF(close)));
+		thisstart = close;
 		close = shortest(v, s, close, close, v->stop, &cold, (int *) NULL);
 		if (close == NULL)
 			break;				/* NOTE BREAK */
@@ -503,6 +505,9 @@ cfindloop(struct vars * v,
 				}
 			}					/* end loop over endpoint positions */
 		}						/* end loop over beginning positions */
+		/* ensure we advance ... */
+		if (close == thisstart)
+			close++;
 	} while (close < v->stop);
 
 	*coldp = cold;
@@ -942,17 +947,17 @@ citerdissect(struct vars * v,
 	assert(begin <= end);
 
 	/*
-	 * If zero matches are allowed, and target string is empty, just declare
-	 * victory.  OTOH, if target string isn't empty, zero matches can't work
-	 * so we pretend the min is 1.
+	 * For the moment, assume the minimum number of matches is 1.  If zero
+	 * matches are allowed, and the target string is empty, we are allowed to
+	 * match regardless of the contents of the iter node --- but we would
+	 * prefer to match once, so that capturing parens get set.  (An example of
+	 * the concern here is a pattern like "()*\1", which historically this
+	 * code has allowed to succeed.)  Therefore, we deal with the zero-matches
+	 * case at the bottom, after failing to find any other way to match.
 	 */
 	min_matches = t->min;
 	if (min_matches <= 0)
-	{
-		if (begin == end)
-			return REG_OKAY;
 		min_matches = 1;
-	}
 
 	/*
 	 * We need workspace to track the endpoints of each sub-match.  Normally
@@ -1097,8 +1102,19 @@ backtrack:
 	}
 
 	/* all possibilities exhausted */
-	MDEBUG(("%d failed\n", t->id));
 	FREE(endpts);
+
+	/*
+	 * Now consider the possibility that we can match to a zero-length string
+	 * by using zero repetitions.
+	 */
+	if (t->min == 0 && begin == end)
+	{
+		MDEBUG(("%d allowing zero matches\n", t->id));
+		return REG_OKAY;
+	}
+
+	MDEBUG(("%d failed\n", t->id));
 	return REG_NOMATCH;
 }
 
