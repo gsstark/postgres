@@ -40,6 +40,8 @@
 #include "regex/regguts.h"
 
 
+MemoryContext RegexpContext;
+
 /*
  * pg_regfree - free an RE (generic function, punts to RE-specific function)
  *

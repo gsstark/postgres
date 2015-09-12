@@ -50,9 +50,11 @@
 
 /* overrides for regguts.h definitions, if any */
 #define FUNCPTR(name, args) (*name) args
-#define MALLOC(n)		malloc(n)
-#define FREE(p)			free(VS(p))
-#define REALLOC(p,n)	realloc(VS(p),n)
+
+extern MemoryContext RegexpContext;
+#define MALLOC(n)		MemoryContextAlloc(RegexpContext, (n))
+#define FREE(p)			pfree(VS(p))
+#define REALLOC(p,n)	repalloc(VS(p), n)
 #define assert(x)		Assert(x)
 
 /* internal character type and related */

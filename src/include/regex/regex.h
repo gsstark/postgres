@@ -167,6 +167,7 @@ typedef struct
 /*
  * the prototypes for exported functions
  */
+extern void pg_regex_set_rcancel(int (*)(void));
 extern int	pg_regcomp(regex_t *, const pg_wchar *, size_t, int, Oid);
 extern int	pg_regexec(regex_t *, const pg_wchar *, size_t, size_t, rm_detail_t *, size_t, regmatch_t[], int);
 extern int	pg_regprefix(regex_t *, pg_wchar **, size_t *);

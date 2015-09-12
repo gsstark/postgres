@@ -1459,6 +1459,8 @@ pull(struct nfa * nfa,
 			return 0;
 		copyins(nfa, from, s, 1);		/* duplicate inarcs */
 		cparc(nfa, con, s, to); /* move constraint arc */
+		if (NISERR())
+			return 0;
 		freearc(nfa, con);
 		from = s;
 		con = from->outs;
@@ -1580,6 +1582,8 @@ push(struct nfa * nfa,
 		copyouts(nfa, to, s, 1);	/* duplicate outarcs */
 		cparc(nfa, con, from, s);		/* move constraint */
 		freearc(nfa, con);
+		if (NISERR())
+			return 0;
 		to = s;
 		con = to->ins;
 	}

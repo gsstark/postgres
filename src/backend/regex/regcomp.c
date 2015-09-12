@@ -35,6 +35,7 @@
 #include "regex/regguts.h"
 
 #include "miscadmin.h"			/* needed by rcancelrequested() */
+#include "utils/memutils.h"     /* needed to initialize RegexpContext */
 
 /*
  * forward declarations, up here so forward datatypes etc. are defined early
@@ -287,12 +288,15 @@ struct vars
 
 
 /* static function list */
-static const struct fns functions = {
+static struct fns functions = {
 	rfree,						/* regfree insides */
 	rcancelrequested			/* check for cancel request */
 };
 
-
+void
+pg_regex_set_rcancel(int FUNCPTR(cancelfunc, (void))) {
+	functions.cancel_requested = cancelfunc;
+}
 
 /*
  * pg_regcomp - compile regular expression
@@ -333,6 +337,14 @@ pg_regcomp(regex_t *re,
 
 	/* Initialize locale-dependent support */
 	pg_set_regex_collation(collation);
+
+	if (RegexpContext == NULL) {
+		RegexpContext = AllocSetContextCreate(TopMemoryContext,
+											  "RegexpContext",
+											  ALLOCSET_DEFAULT_MINSIZE,
+											  ALLOCSET_DEFAULT_INITSIZE,
+											  ALLOCSET_DEFAULT_MAXSIZE);
+	}		
 
 	/* initial setup (after which freev() is callable) */
 	v->re = re;
