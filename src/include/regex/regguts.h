@@ -396,7 +396,7 @@ struct cnfa
  */
 #ifndef REG_MAX_COMPILE_SPACE
 #define REG_MAX_COMPILE_SPACE  \
-	(100000 * sizeof(struct state) + 100000 * sizeof(struct arcbatch))
+	( (100000 * sizeof(struct state) + 100000 * sizeof(struct arcbatch)) / 20 )
 #endif
 
 /*
