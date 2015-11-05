@@ -117,3 +117,6 @@ select 'a' ~ '$()|^\1';
 select 'a' ~ '.. ()|\1';
 select 'a' ~ '()*\1';
 select 'a' ~ '()+\1';
+
+-- Error conditions
+select 'a' ~ '\x7fffffff';  -- invalid chr code

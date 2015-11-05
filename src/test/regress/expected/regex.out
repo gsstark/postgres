@@ -490,3 +490,6 @@ select 'a' ~ '()+\1';
  t
 (1 row)
 
+-- Error conditions
+select 'a' ~ '\x7fffffff';  -- invalid chr code
+ERROR:  invalid regular expression: invalid escape \ sequence
