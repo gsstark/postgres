@@ -1095,13 +1095,15 @@ static void
 test_config_settings(void)
 {
 	/*
-	 * This macro defines the minimum shared_buffers we want for a given
-	 * max_connections value. The arrays show the settings to try.
+	 * Only allow default max_connections values that can run reasonably well
+	 * including supporting enough concurrent buffer pins to run reasonable
+	 * queries
 	 */
+
 #define MIN_BUFS_FOR_CONNS(nconns)	((nconns) * 10)
 
 	static const int trial_conns[] = {
-		100, 50, 40, 30, 20, 10
+		100, 50, 40, 30, 20, 10, 5
 	};
 	static const int trial_bufs[] = {
 		16384, 8192, 4096, 3584, 3072, 2560, 2048, 1536,
@@ -1117,7 +1119,7 @@ test_config_settings(void)
 				test_conns,
 				test_buffs,
 				ok_buffers = 0;
-
+	size_t		memory_size = getMemorySize();
 
 	printf(_("selecting default max_connections ... "));
 	fflush(stdout);
@@ -1126,6 +1128,13 @@ test_config_settings(void)
 	{
 		test_conns = trial_conns[i];
 		test_buffs = MIN_BUFS_FOR_CONNS(test_conns);
+
+		/* Skip tests that risk thrashing the machine by allocating lots
+		 * of swap or worse (e.g. http://gnats.netbsd.org/28379). */
+		if (memory_size > 0 && test_buffs * BLCKSZ > memory_size/8)
+		{
+			continue;
+		}
 
 		snprintf(cmd, sizeof(cmd),
 				 "\"%s\" --boot -x0 %s "
@@ -1160,6 +1169,12 @@ test_config_settings(void)
 		{
 			test_buffs = ok_buffers;
 			break;
+		}
+
+		/* Skip tests that risk thrashing the machine by allocating lots
+		 * of swap or worse (e.g. http://gnats.netbsd.org/28379). */
+		if (memory_size > 0 && test_buffs * BLCKSZ > memory_size/8) {
+			continue;
 		}
 
 		snprintf(cmd, sizeof(cmd),

@@ -3123,6 +3123,24 @@ check_stack_depth(void)
 	}
 }
 
+#ifdef DEBUG_STACK_DEPTH
+long last_stack_depth = 0;
+long high_stack_depth = 0;
+long high_stack_incr = 0;
+bool stack_depth_on_proc_exit = 0;
+
+/*
+ * on_proc_exit handler to log end of session
+ */
+static void
+log_stack_depth(int code, Datum arg)
+{
+	ereport(LOG,
+			(errmsg("disconnection: highest stack depth: %lu largest stack increment: %lu",
+					high_stack_depth, high_stack_incr)));
+}
+#endif
+
 bool
 stack_is_too_deep(void)
 {
@@ -3186,11 +3204,12 @@ check_max_stack_depth(int *newval, void **extra, GucSource source)
 {
 	long		newval_bytes = *newval * 1024L;
 	long		stack_rlimit = get_stack_depth_rlimit();
+	long		stack_depth_slop = Min(stack_rlimit/2, STACK_DEPTH_SLOP);
 
-	if (stack_rlimit > 0 && newval_bytes > stack_rlimit - STACK_DEPTH_SLOP)
+	if (stack_rlimit > 0 && newval_bytes > stack_rlimit - stack_depth_slop)
 	{
 		GUC_check_errdetail("\"max_stack_depth\" must not exceed %ldkB.",
-							(stack_rlimit - STACK_DEPTH_SLOP) / 1024L);
+							(stack_rlimit - stack_depth_slop) / 1024L);
 		GUC_check_errhint("Increase the platform's stack depth limit via \"ulimit -s\" or local equivalent.");
 		return false;
 	}

@@ -469,4 +469,7 @@ extern char *escape_single_quotes_ascii(const char *src);
 /* port/wait_error.c */
 extern char *wait_result_to_str(int exit_status);
 
+/* port/getMemorySize.c */
+extern size_t getMemorySize(void);
+
 #endif   /* PG_PORT_H */
