@@ -1947,6 +1947,65 @@ create_role(const char *rolename, const _stringlist *granted_dbs)
 	}
 }
 
+/*
+ * Check the server max_connections setting to avoid having test failures due
+ * to running more parallel tests than the server is configured for. initdb.c
+ * will by default configure max_connections as low as 5 so try to ensure this
+ * will work for values as low as that.
+ *
+ */
+
+/* reserve some connections for autovacuum etc */
+#define MAX_CONNECTIONS_SLOP 4
+
+static void
+check_max_connections(void)
+{
+	char		filename[MAXPGPATH], max_connections_str[100];
+	FILE	   *file;
+	int			server_max_connections;
+	
+	snprintf(filename, sizeof(filename), "%s/max_connections.tmp", outputdir);
+	if (file_exists(filename))
+	{
+		unlink(filename);
+	}
+	psql_command("postgres",
+				 "\\copy (select setting from pg_settings where name = 'max_connections') to '%s'",
+				 filename);
+	file = fopen(filename, "r");
+
+	if (!file)
+	{
+		fprintf(stderr, _("%s: could not open file \"%s\" for reading: %s\n"),
+				progname, filename, strerror(errno));
+		exit(2);
+	}
+
+	if (!fgets(max_connections_str, sizeof(max_connections_str), file))
+	{
+		fprintf(stderr, _("%s: could not read from file \"%s\"\n"),
+				progname, filename);
+		exit(2);
+	}
+
+	fclose(file);
+
+	server_max_connections = atoi(max_connections_str);
+
+	if (server_max_connections <= MAX_CONNECTIONS_SLOP)
+	{
+		fprintf(stderr, _("%s: server is configured with max_connections=%d too low to run pg_regress\n"),
+				progname, server_max_connections);
+		exit(2);
+	}
+
+	if (max_connections == 0 || max_connections > server_max_connections + MAX_CONNECTIONS_SLOP)
+	{
+		max_connections = server_max_connections - MAX_CONNECTIONS_SLOP;
+	}
+}
+
 static void
 help(void)
 {
@@ -2435,6 +2494,9 @@ regression_main(int argc, char *argv[], init_function ifunc, test_function tfunc
 		for (sl = extraroles; sl; sl = sl->next)
 			create_role(sl->str, dblist);
 	}
+
+	/* Adjust max_connections from server setting */
+	check_max_connections();
 
 	/*
 	 * Ready to run the tests

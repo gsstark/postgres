@@ -167,3 +167,4 @@ clean distclean maintainer-clean: clean-lib
 	rm -f $(output_files) $(input_files)
 	rm -rf testtablespace
 	rm -rf $(pg_regress_clean_files)
+	rm --f max_connections.tmp
