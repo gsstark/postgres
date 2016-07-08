@@ -2694,6 +2694,36 @@ FloatExceptionHandler(SIGNAL_ARGS)
 					   "invalid operation, such as division by zero.")));
 }
 
+#if __vax__ || !__DBL_HAS_QUIET_NAN__
+/* This should be an autoconf test */
+#define NEED_INFNAN
+#endif
+
+#ifdef NEED_INFNAN
+/* This overrides the default infnan() provided by libc on platforms that do
+ * not have IEEE floats (i.e. VAX). 
+ *
+ * It is used by libm functions to produce NaN or +/- Inf for things like
+ * ln(0). It does not change the behaviour of things like 1/0 which produce
+ * NaN (or SIGFPE) all on their own. 
+ *
+ * On VAX the default infnan() triggers a SIGILL which is not very helpful.
+ */
+
+double infnan(int error);
+double
+infnan(int error)
+{
+	ereport(ERROR,
+			(errcode(ERRCODE_FLOATING_POINT_EXCEPTION),
+			 errmsg("floating-point exception"),
+			 errdetail("An invalid floating-point operation was signaled. "
+					   "This probably means an out-of-range result or an "
+					   "invalid operation, such as division by zero.")));
+}
+#endif
+
+
 /* SIGHUP: set flag to re-read config file at next convenient time */
 static void
 SigHupHandler(SIGNAL_ARGS)
