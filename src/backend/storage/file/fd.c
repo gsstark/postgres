@@ -868,7 +868,7 @@ set_max_safe_fds(void)
 						   max_safe_fds + NUM_RESERVED_FDS,
 						   FD_MINFREE + NUM_RESERVED_FDS)));
 
-	elog(DEBUG2, "max_safe_fds = %d, usable_fds = %d, already_open = %d",
+	elog(LOG, "max_safe_fds = %d, usable_fds = %d, already_open = %d",
 		 max_safe_fds, usable_fds, already_open);
 }
 
