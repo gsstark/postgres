@@ -134,7 +134,7 @@ report_stack_size(void)
 	/* Otherwise: try to use pmap.  No error if that doesn't work. */
 	char		sysbuf[128];
 
-	snprintf(sysbuf, sizeof(sysbuf), "pmap -x %d | grep -i stack 1>&2",
+	snprintf(sysbuf, sizeof(sysbuf), "pmap %d | grep -i stack 1>&2",
 			 (int) getpid());
 	(void) system(sysbuf);
 #endif
