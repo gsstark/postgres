@@ -23,6 +23,7 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include <unistd.h>
+#include <float.h>
 
 #ifdef HAVE_SYS_RESOURCE_H
 #include <sys/time.h>
@@ -772,21 +773,38 @@ initialize_environment(void)
 	putenv("PGTZ=PST8PDT");
 	putenv("PGDATESTYLE=Postgres, MDY");
 
-	/*
-	 * Likewise set intervalstyle to ensure consistent results.  This is a bit
-	 * more painful because we must use PGOPTIONS, and we want to preserve the
-	 * user's ability to set other variables through that.
+	
+	/* Set a few server parameters via PGOPTIONS. This is a bit more painful
+	 * because we must use PGOPTIONS, and we want to preserve the user's
+	 * ability to set other variables through that.
 	 */
-	{
-		const char *my_pgoptions = "-c intervalstyle=postgres_verbose";
-		const char *old_pgoptions = getenv("PGOPTIONS");
-		char	   *new_pgoptions;
 
-		if (!old_pgoptions)
-			old_pgoptions = "";
-		new_pgoptions = psprintf("PGOPTIONS=%s %s",
-								 old_pgoptions, my_pgoptions);
-		putenv(new_pgoptions);
+	{
+		const char *pgoptions = getenv("PGOPTIONS");
+
+		if (!pgoptions)
+			pgoptions = "";
+
+		/* Like above intervalstyle needed to get consistent results */
+		pgoptions = psprintf("%s -c intervalstyle=%s",
+							 pgoptions,
+							 "postgres_verbose");
+
+		/* And the regression tests expected outputs assume DBL_DIG==15 */
+		if (DBL_DIG != 15) {
+			int extra_float_digits = 15 - DBL_DIG;
+			if (extra_float_digits < 3 && extra_float_digits > -15)
+			{
+				pgoptions = psprintf("%s -c extra_float_digits=%d",
+									 pgoptions,
+									 extra_float_digits);
+			} else {
+				fprintf(stderr, _("%s: warning, unusual DBL_DIG (%d) expect test failures due to floating print format\n"),
+						progname, DBL_DIG);
+			}
+		}
+
+		putenv(psprintf("PGOPTIONS=%s", pgoptions));
 	}
 
 	if (temp_instance)
