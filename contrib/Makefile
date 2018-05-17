@@ -5,6 +5,7 @@ top_builddir = ..
 include $(top_builddir)/src/Makefile.global
 
 SUBDIRS = \
+		pg_metrics \
 		adminpack	\
 		amcheck		\
 		auth_delay	\

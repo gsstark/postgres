@@ -1,0 +1,5 @@
+# pg_metrics extension
+comment = 'metrics'
+default_version = '0.1'
+module_pathname = '$libdir/pg_metrics'
+relocatable = true
